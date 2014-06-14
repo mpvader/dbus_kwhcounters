@@ -206,7 +206,7 @@ def main():
 
 
     # Start and run the mainloop
-    logging.info("Starting mainloop, responding on only events from now on")
+    logging.info("Starting mainloop, responding on only events from now on. Press ctrl-Z to see the deltas")
     mainloop = gobject.MainLoop()
     mainloop.run()
 
