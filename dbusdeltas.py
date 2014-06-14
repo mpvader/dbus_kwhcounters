@@ -50,7 +50,8 @@ class DbusDeltas(object):
         newsnapshot = {}
         deltas = {}
         import pprint
-        logging.debug(pprint.pformat(self._snapshot))
+        # logging.debug("Old snapshot:")
+        # pprint.pprint(self._snapshot)
         for serviceclass, paths in self._classes_and_paths.iteritems():
             services = self._dbusmonitor.get_service_list(serviceclass)
             deltas[serviceclass] = {}
@@ -70,10 +71,10 @@ class DbusDeltas(object):
                             delta = delta + max(newvalue - self._snapshot[service][path], 0)
 
                 # Store the delta in the result
-                if not keepoldsnapshot:
-                    deltas[serviceclass][path] = delta
+                deltas[serviceclass][path] = delta
 
-        # throw away the old snapshot, and replace with the new one.
-        self._snapshot = newsnapshot
+        if not keepoldsnapshot:
+            # throw away the old snapshot, and replace with the new one.
+            self._snapshot = newsnapshot
 
         return deltas

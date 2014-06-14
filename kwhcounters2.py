@@ -42,12 +42,12 @@ import logging
 import datetime
 import platform
 import dbus
-from os import path, pardir
+import os
 import sys
 import time
 
 # Victron imports
-sys.path.insert(1, path.join(path.dirname(__file__), './ext/velib_python'))
+sys.path.insert(1, os.path.join(os.path.dirname(__file__), './ext/velib_python'))
 from dbusmonitor import DbusMonitor
 from vedbus import VeDbusService
 from settingsdevice import SettingsDevice
@@ -62,13 +62,13 @@ dbusdeltas = None
 def getdeltas():
     # TODO: Add possible DC consumption into the calculations.
 
-    print chr(27) + "[2J"
+    os.system('clear')
 
     import pprint
     print "==== get_deltas() start ===="
     print "time %d" % time.time()
-    print "Result of get_deltas():"
     deltas = dbusdeltas.get_deltas(True)
+    print "Result of get_deltas():"
     pprint.pprint(deltas)
 
     # ======= Change acin 1 and acin 2 into genset and mains =======
@@ -81,8 +81,8 @@ def getdeltas():
         #setting genset1, will contain Acin1 or AcIn2
     """
 
-    vebus = deltas['com.victronenergy.vebus']
 
+    vebus = deltas['com.victronenergy.vebus']
     rename_dict_key(vebus, '/Energy/AcIn1ToAcOut', '/Energy/GensetToAcOut')
     rename_dict_key(vebus, '/Energy/AcIn2ToAcOut', '/Energy/GridToAcOut')
     rename_dict_key(vebus, '/Energy/AcIn1ToInverter', '/Energy/GensetToDc')
