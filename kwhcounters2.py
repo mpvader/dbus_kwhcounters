@@ -65,11 +65,10 @@ def getdeltas():
     os.system('clear')
 
     import pprint
-    print "==== get_deltas() start ===="
-    print "time %d" % time.time()
+    print "==== get_deltas() %s ====" % time.time()
     deltas = dbusdeltas.get_deltas(True)
-    print "Result of get_deltas():"
-    pprint.pprint(deltas)
+    # print "Result of get_deltas():"
+    # pprint.pprint(deltas)
 
     # ======= Change acin 1 and acin 2 into genset and mains =======
     # TODO: use some setting for this, instead of just taking ACin1 = genset and ACin2 = mains.
@@ -81,7 +80,6 @@ def getdeltas():
         #setting genset1, will contain Acin1 or AcIn2
     """
 
-
     vebus = deltas['com.victronenergy.vebus']
     rename_dict_key(vebus, '/Energy/AcIn1ToAcOut', '/Energy/GensetToAcOut')
     rename_dict_key(vebus, '/Energy/AcIn2ToAcOut', '/Energy/GridToAcOut')
@@ -92,7 +90,7 @@ def getdeltas():
     rename_dict_key(vebus, '/Energy/InverterToAcIn1', '/Energy/DcToGenset')
     rename_dict_key(vebus, '/Energy/InverterToAcIn2', '/Energy/DcToGrid')
 
-    # Just rename Inverter to Dc, so we are consistent with above
+    # Rename Inverter to Dc, so we are consistent with above
     rename_dict_key(vebus, '/Energy/InverterToAcOut', '/Energy/DcToAcOut')
     rename_dict_key(vebus, '/Energy/OutToInverter', '/Energy/AcOutToDc')
 
@@ -122,7 +120,20 @@ def getdeltas():
     dbusservice['/BatteryToConsumers'] = vebus['/Energy/DcToAcOut']
     dbusservice['/BatteryToGrid'] = vebus['/Energy/DcToGrid']
 
+    pr('/GridToConsumers')
+    pr('/GridToBattery')
+    pr('/GensetToConsumers')
+    pr('/GensetToBattery')
+    pr('/PvToBattery')
+    pr('/PvToConsumers')
+    pr('/PvToGrid')
+    pr('/BatteryToConsumers')
+    pr('/BatteryToGrid')
+
     return True
+
+def pr(name):
+    print("%s: %s" % (name, dbusservice[name]))
 
 def rename_dict_key(dict, old_key, new_key):
     dict[new_key] = dict.pop(old_key)
