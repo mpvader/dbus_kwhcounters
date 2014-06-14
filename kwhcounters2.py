@@ -59,14 +59,16 @@ dbusmonitor = None
 dbusservice = None
 dbusdeltas = None
 
-def getdeltas(a, b):
+def getdeltas():
     # TODO: Add possible DC consumption into the calculations.
+
+    print chr(27) + "[2J"
 
     import pprint
     print "==== get_deltas() start ===="
     print "time %d" % time.time()
     print "Result of get_deltas():"
-    deltas = dbusdeltas.get_deltas()
+    deltas = dbusdeltas.get_deltas(True)
     pprint.pprint(deltas)
 
     # ======= Change acin 1 and acin 2 into genset and mains =======
@@ -200,9 +202,9 @@ def main():
 
     dbusdeltas = DbusDeltas(dbusmonitor, dbusmonitoritems)
 
-    #gobject.timeout_add(1000, getdeltas)
-    import signal
-    signal.signal(signal.SIGTSTP, getdeltas)
+    gobject.timeout_add(1000, getdeltas)
+    #import signal
+    #signal.signal(signal.SIGTSTP, getdeltas)
 
 
     # Start and run the mainloop

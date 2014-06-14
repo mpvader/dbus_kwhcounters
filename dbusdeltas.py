@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import logging
+
 """
 On startup, pass DbusDeltas a list of device classes that you want to monitor, and the paths of those
 classes. An example of a device class is com.victronenergy.battery. Then, call DbusDeltas.get_deltas()
@@ -47,6 +49,8 @@ class DbusDeltas(object):
     def get_deltas(self, keepoldsnapshot=False):
         newsnapshot = {}
         deltas = {}
+        import pprint
+        logging.debug(pprint.pformat(self._snapshot))
         for serviceclass, paths in self._classes_and_paths.iteritems():
             services = self._dbusmonitor.get_service_list(serviceclass)
             deltas[serviceclass] = {}
