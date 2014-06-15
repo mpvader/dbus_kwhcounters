@@ -44,20 +44,19 @@ class DbusDeltas(object):
         # comparing the same serialnumber? To prevent messing everything up.
         pass
 
-    # Gets the new value from the dbus, adds the delta to the result dict, and stores the new value (unless
-    # you don't want it to store the new value).
+    # Gets the new value from the dbus, adds the delta to the result dict, and stores the new value. When you
+    # don't want it to store the new value, use the parameter.
     def get_deltas(self, keepoldsnapshot=False):
         newsnapshot = {}
         deltas = {}
         import pprint
         # logging.debug("Old snapshot:")
         # pprint.pprint(self._snapshot)
-        for serviceclass, paths in self._classes_and_paths.iteritems():
-            services = self._dbusmonitor.get_service_list(serviceclass)
-            deltas[serviceclass] = {}
-            for path in paths:
+        for group, details in self._classes_and_paths.iteritems():
+            deltas[group] = {}
+            for path in details['paths']:
                 delta = 0
-                for service in services.values():
+                for service in details['services']:
                     newvalue = self._dbusmonitor.get_value(service, path)
                     if newvalue:
                         if service not in newsnapshot:
@@ -71,7 +70,7 @@ class DbusDeltas(object):
                             delta = delta + max(newvalue - self._snapshot[service][path], 0)
 
                 # Store the delta in the result
-                deltas[serviceclass][path] = delta
+                deltas[group][path] = delta
 
         if not keepoldsnapshot:
             # throw away the old snapshot, and replace with the new one.

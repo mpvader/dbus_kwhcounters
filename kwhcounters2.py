@@ -39,12 +39,10 @@ from dbus.mainloop.glib import DBusGMainLoop
 import gobject
 import argparse
 import logging
-import datetime
-import platform
-import dbus
 import os
 import sys
 import time
+import pprint
 
 # Victron imports
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), './ext/velib_python'))
@@ -55,82 +53,8 @@ from dbusdeltas import DbusDeltas
 
 softwareversion = '0.10'
 
-dbusmonitor = None
 dbusservice = None
-dbusdeltas = None
-
-def getdeltas():
-    # TODO: Add possible DC consumption into the calculations.
-
-    os.system('clear')
-
-    import pprint
-    print "==== get_deltas() %s ====" % time.time()
-    deltas = dbusdeltas.get_deltas(True)
-    # print "Result of get_deltas():"
-    # pprint.pprint(deltas)
-
-    # ======= Change acin 1 and acin 2 into genset and mains =======
-    # TODO: use some setting for this, instead of just taking ACin1 = genset and ACin2 = mains.
-
-    """
-        if settings[AcIn1Type] == inputtype.GRID:
-        else
-        #setting grid, will contain AcIn1 or AcIn2
-        #setting genset1, will contain Acin1 or AcIn2
-    """
-
-    vebus = deltas['com.victronenergy.vebus']
-    rename_dict_key(vebus, '/Energy/AcIn2ToAcOut', '/Energy/GensetToAcOut')
-    rename_dict_key(vebus, '/Energy/AcIn1ToAcOut', '/Energy/GridToAcOut')
-    rename_dict_key(vebus, '/Energy/AcIn2ToInverter', '/Energy/GensetToDc')
-    rename_dict_key(vebus, '/Energy/AcIn1ToInverter', '/Energy/GridToDc')
-    rename_dict_key(vebus, '/Energy/AcOutToAcIn2', '/Energy/AcOutToGenset')
-    rename_dict_key(vebus, '/Energy/AcOutToAcIn1', '/Energy/AcOutToGrid')
-    rename_dict_key(vebus, '/Energy/InverterToAcIn2', '/Energy/DcToGenset')
-    rename_dict_key(vebus, '/Energy/InverterToAcIn1', '/Energy/DcToGrid')
-
-    # Rename Inverter to Dc, so we are consistent with above
-    rename_dict_key(vebus, '/Energy/InverterToAcOut', '/Energy/DcToAcOut')
-    rename_dict_key(vebus, '/Energy/OutToInverter', '/Energy/AcOutToDc')
-
-    print("Result of converting ACin 1 and 2 to Genset and mains:")
-    pprint.pprint(deltas)
-
-    # ======= Do the calculations and set values on the dbus =======
-    global dbusservice
-    pvac_total = deltas['com.victronenergy.pvinverter']['/Ac/Energy/Forward']
-
-    # TODO: Use PVac location, instead of assuming that all is on the output
-    pvac_to_battery = min(vebus['/Energy/AcOutToDc'], pvac_total)
-    pvac_to_consumers = pvac_total - vebus['/Energy/AcOutToGrid'] - vebus['/Energy/AcOutToDc']
-    pvac_to_grid = min(vebus['/Energy/AcOutToGrid'], pvac_total)
-
-    pvdc_to_battery = 0
-    pvdc_to_grid = 0
-    pvdc_to_consumers = 0
-
-    dbusservice['/GridToConsumers'] = vebus['/Energy/GridToAcOut']
-    dbusservice['/GridToBattery'] = vebus['/Energy/GridToDc']
-    dbusservice['/GensetToConsumers'] = vebus['/Energy/GensetToAcOut']
-    dbusservice['/GensetToBattery'] = vebus['/Energy/GensetToDc']
-    dbusservice['/PvToBattery'] = pvac_to_battery + pvdc_to_battery
-    dbusservice['/PvToConsumers'] = pvac_to_consumers + pvdc_to_consumers
-    dbusservice['/PvToGrid'] = pvac_to_grid + pvdc_to_grid
-    dbusservice['/BatteryToConsumers'] = vebus['/Energy/DcToAcOut']
-    dbusservice['/BatteryToGrid'] = vebus['/Energy/DcToGrid']
-
-    pr('/GridToConsumers')
-    pr('/GridToBattery')
-    pr('/GensetToConsumers')
-    pr('/GensetToBattery')
-    pr('/PvToBattery')
-    pr('/PvToConsumers')
-    pr('/PvToGrid')
-    pr('/BatteryToConsumers')
-    pr('/BatteryToGrid')
-
-    return True
+kwhdeltas = None
 
 def pr(name):
     print("%s: %s" % (name, dbusservice[name]))
@@ -138,10 +62,189 @@ def pr(name):
 def rename_dict_key(dict, old_key, new_key):
     dict[new_key] = dict.pop(old_key)
 
+class KwhDeltas:
+    def __init__(self):
+        self.store = {
+            'vebus': {
+                'services': [], 'class': 'com.victronenergy.vebus',
+                'paths': [
+                    '/Energy/AcIn1ToInverter',
+                    '/Energy/AcIn2ToInverter',
+                    '/Energy/AcIn1ToAcOut',
+                    '/Energy/AcIn2ToAcOut',
+                    '/Energy/InverterToAcIn1',
+                    '/Energy/InverterToAcIn2',
+                    '/Energy/AcOutToAcIn1',
+                    '/Energy/AcOutToAcIn2',
+                    '/Energy/InverterToAcOut',
+                    '/Energy/OutToInverter']},
+            'pvac.output': {
+                'services': [], 'class': 'com.victronenergy.pvinverter',
+                'paths': [
+                    '/Ac/Energy/Forward',
+                    '/Position']}}
+        """
+            'battery': {
+                'services': [], 'class': 'com.victronenergy.battery',
+                'paths': [
+                    '/History/DischargedEnergy',
+                    '/History/ChargedEnergy']},
+            'pvac.grid': {
+                'services': [], 'class': 'com.victronenergy.pvinverter',
+                'paths': [
+                    '/Ac/Energy/Forward',
+                    '/Position']},
+            'pvac.genset': {
+                'services': [], 'class': 'com.victronenergy.pvinverter',
+                'paths': [
+                    '/Ac/Energy/Forward',
+                    '/Position']},
+            'pvdc': {
+                'services': [], 'class': 'com.victronenergy.solarcharger',
+                'paths': [
+                    '/Yield/System']}
+        """
+
+        self.dbusmonitor = self._initdbusmonitor()
+
+        # init all instances already existing on the dbus
+        services = self.dbusmonitor.get_service_list()
+        logging.debug("services at startup: %s" % services)
+        for name, instance in services.iteritems():
+            self._handle_new_service(name, instance)
+
+        logging.debug("KwhDeltas.init() finished. self.store: \n%s" % pprint.pformat(self.store))
+
+        self.dbusdeltas = DbusDeltas(self.dbusmonitor, self.store)
+
+    def _initdbusmonitor(self):
+        # Get all unique serviceclasses from self.store, and all paths.
+        dbusmonitoritems = {}
+        # dummy data since DbusMonitor wants it:
+        dummy = {'code': None, 'whenToLog': 'configChange', 'accessLevel': None}
+        for d in self.store.values():
+            if d['class'] not in dbusmonitoritems:
+                dbusmonitoritems[d['class']] = {}
+
+            for path in d['paths']:
+                dbusmonitoritems[d['class']][path] = dummy
+
+        return DbusMonitor(
+            dbusmonitoritems,
+            deviceAddedCallback=self._handle_new_service,
+            deviceRemovedCallback=self._handle_removed_service)
+
+    def _handle_new_service(self, servicename, instance):
+        logging.debug("handle_new_service: %s" % servicename)
+
+        serviceclass = servicename.split('.')
+        if len(serviceclass) < 3 or serviceclass[1] != 'victronenergy':
+            return
+
+        serviceclass = serviceclass[2]
+        if serviceclass == 'vebus':
+            # Use the last found vebus device
+            # TODO: don't use the last vebus device, use some setting.
+            self.store['vebus']['services'] = [servicename]
+        elif serviceclass == 'battery':
+            # Use the last battery
+            # TODO: don't use the last battery, use the main battery (needs to be added as a setting)
+            self.store['battery']['services'] = [servicename]
+        elif serviceclass == 'pvinverter':
+            # Split pv inverters in three groups: grid, genset and mains
+            position = self.dbusmonitor.get_value(servicename, '/Position')
+            pvtype = {0: 'pvac.genset', 1: 'pvac.output', 2: 'pvac.grid'}
+            self.store[pvtype[position]]['services'].append(servicename)
+        elif serviceclass == 'solarcharger':
+            # Group all solarchargers together
+            self.store['solarcharger']['services'].append(servicename)
+
+    def _handle_removed_service(self, servicename, instance):
+        # TODO: Implement removing of services (and when BMV dissapears, choose another one? Or wait for
+        # general setting to change?)
+        pass
+
+    def getdeltas(self):
+        # Calculation status
+        # The calculation only calculates a simple hub-2 system.
+        # TODO: add pv on dc (hub-1) to the calculations
+        # TODO: add pv on grid (hub-3) to the calculations
+        # TODO: add paralled storage (hub-4) to the calculations
+        # TODO: Add possible DC consumption into the calculations
+
+        os.system('clear')
+
+        print "==== get_deltas() %s ====" % time.time()
+        deltas = self.dbusdeltas.get_deltas(True)
+
+        # ======= Change acin 1 and acin 2 into genset and mains =======
+        # TODO: use some setting for this, instead of just taking ACin1 = genset and ACin2 = mains.
+
+        """
+            if settings[AcIn1Type] == inputtype.GRID:
+            else
+            #setting grid, will contain AcIn1 or AcIn2
+            #setting genset1, will contain Acin1 or AcIn2
+        """
+
+        vebus = deltas['vebus']
+        # Note that AcIn1 and AcIn2 are swapped here because of the testsystem: Matthijs his house
+        rename_dict_key(vebus, '/Energy/AcIn2ToAcOut', '/Energy/GensetToAcOut')
+        rename_dict_key(vebus, '/Energy/AcIn1ToAcOut', '/Energy/GridToAcOut')
+        rename_dict_key(vebus, '/Energy/AcIn2ToInverter', '/Energy/GensetToDc')
+        rename_dict_key(vebus, '/Energy/AcIn1ToInverter', '/Energy/GridToDc')
+        rename_dict_key(vebus, '/Energy/AcOutToAcIn2', '/Energy/AcOutToGenset')
+        rename_dict_key(vebus, '/Energy/AcOutToAcIn1', '/Energy/AcOutToGrid')
+        rename_dict_key(vebus, '/Energy/InverterToAcIn2', '/Energy/DcToGenset')
+        rename_dict_key(vebus, '/Energy/InverterToAcIn1', '/Energy/DcToGrid')
+
+        # Rename Inverter to Dc, so we are consistent with above
+        rename_dict_key(vebus, '/Energy/InverterToAcOut', '/Energy/DcToAcOut')
+        rename_dict_key(vebus, '/Energy/OutToInverter', '/Energy/AcOutToDc')
+
+        print("Result of converting ACin 1 and 2 to Genset and mains:")
+        pprint.pprint(deltas)
+
+        # ======= Do the calculations and set values on the dbus =======
+        pvac_output = deltas['pvac.output']['/Ac/Energy/Forward']
+
+        pvac_to_battery = min(vebus['/Energy/AcOutToDc'], pvac_output)
+        # Max is for measurement inaccuracies. If pvac_output is counting slower than AcOutToGrid, you could
+        # get values below 0.
+        pvac_to_consumers = max(pvac_output - vebus['/Energy/AcOutToGrid'] - vebus['/Energy/AcOutToDc'], 0)
+        pvac_to_grid = min(vebus['/Energy/AcOutToGrid'], pvac_output)
+
+        pvdc_to_battery = 0
+        pvdc_to_grid = 0
+        pvdc_to_consumers = 0
+
+        global dbusservice
+        dbusservice['/GridToConsumers'] = vebus['/Energy/GridToAcOut']
+        dbusservice['/GridToBattery'] = vebus['/Energy/GridToDc']
+        dbusservice['/GensetToConsumers'] = vebus['/Energy/GensetToAcOut']
+        dbusservice['/GensetToBattery'] = vebus['/Energy/GensetToDc']
+        dbusservice['/PvToBattery'] = pvac_to_battery + pvdc_to_battery
+        dbusservice['/PvToConsumers'] = pvac_to_consumers + pvdc_to_consumers
+        dbusservice['/PvToGrid'] = pvac_to_grid + pvdc_to_grid
+        dbusservice['/BatteryToConsumers'] = vebus['/Energy/DcToAcOut']
+        dbusservice['/BatteryToGrid'] = vebus['/Energy/DcToGrid']
+
+        pr('/GridToConsumers')
+        pr('/GridToBattery')
+        pr('/GensetToConsumers')
+        pr('/GensetToBattery')
+        pr('/PvToBattery')
+        pr('/PvToConsumers')
+        pr('/PvToGrid')
+        pr('/BatteryToConsumers')
+        pr('/BatteryToGrid')
+
+        return True
+
+
 def main():
-    global dbusmonitor
     global dbusservice
-    global dbusdeltas
+    global kwhdeltas
 
     # Argument parsing
     parser = argparse.ArgumentParser(
@@ -163,42 +266,6 @@ def main():
     # Have a mainloop, so we can send/receive asynchronous calls to and from dbus
     DBusGMainLoop(set_as_default=True)
 
-    dbusmonitoritems = {
-        'com.victronenergy.vebus' : [
-            '/Energy/AcIn1ToInverter',
-            '/Energy/AcIn2ToInverter',
-            '/Energy/AcIn1ToAcOut',
-            '/Energy/AcIn2ToAcOut',
-            '/Energy/InverterToAcIn1',
-            '/Energy/InverterToAcIn2',
-            '/Energy/AcOutToAcIn1',
-            '/Energy/AcOutToAcIn2',
-            '/Energy/InverterToAcOut',
-            '/Energy/OutToInverter'],
-        'com.victronenergy.solarcharger' : [
-            '/Yield/System'],
-        'com.victronenergy.pvinverter': [
-            '/Ac/Energy/Forward'
-        ],
-        'com.victronenergy.battery' : [
-            '/History/DischargedEnergy',
-            '/History/ChargedEnergy'
-        ]
-    }
-
-    # Translate above dict into the format that DbusMonitor expects.
-    # dummy data since DbusMonitor wants it:
-    dummy = {'code': None, 'whenToLog': 'configChange', 'accessLevel': None}
-    tree = {}
-    for deviceclass, paths in dbusmonitoritems.iteritems():
-        tree[deviceclass] = {}
-        for path in paths:
-            tree[deviceclass][path] = dummy
-
-    # TODO: add device added and device removed callbacks, to prevent missing the little kWhs between
-    # the time that the device comes online and the passing of the hour
-    dbusmonitor = DbusMonitor(tree)
-
     # Publish ourselves on the dbus
     dbusservice = VeDbusService("com.victronenergy.kwhcounters.s0")
     dbusservice.add_path('/GridToBattery', value=None)
@@ -211,12 +278,9 @@ def main():
     dbusservice.add_path('/BatteryToConsumers', value=None)
     dbusservice.add_path('/BatteryToGrid', value=None)
 
-    dbusdeltas = DbusDeltas(dbusmonitor, dbusmonitoritems)
+    kwhdeltas = KwhDeltas()
 
-    gobject.timeout_add(1000, getdeltas)
-    #import signal
-    #signal.signal(signal.SIGTSTP, getdeltas)
-
+    gobject.timeout_add(1000, kwhdeltas.getdeltas)
 
     # Start and run the mainloop
     logging.info("Starting mainloop, responding on only events from now on. Press ctrl-Z to see the deltas")
