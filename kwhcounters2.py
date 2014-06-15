@@ -81,14 +81,14 @@ def getdeltas():
     """
 
     vebus = deltas['com.victronenergy.vebus']
-    rename_dict_key(vebus, '/Energy/AcIn1ToAcOut', '/Energy/GensetToAcOut')
-    rename_dict_key(vebus, '/Energy/AcIn2ToAcOut', '/Energy/GridToAcOut')
-    rename_dict_key(vebus, '/Energy/AcIn1ToInverter', '/Energy/GensetToDc')
-    rename_dict_key(vebus, '/Energy/AcIn2ToInverter', '/Energy/GridToDc')
-    rename_dict_key(vebus, '/Energy/AcOutToAcIn1', '/Energy/AcOutToGenset')
-    rename_dict_key(vebus, '/Energy/AcOutToAcIn2', '/Energy/AcOutToGrid')
-    rename_dict_key(vebus, '/Energy/InverterToAcIn1', '/Energy/DcToGenset')
-    rename_dict_key(vebus, '/Energy/InverterToAcIn2', '/Energy/DcToGrid')
+    rename_dict_key(vebus, '/Energy/AcIn2ToAcOut', '/Energy/GensetToAcOut')
+    rename_dict_key(vebus, '/Energy/AcIn1ToAcOut', '/Energy/GridToAcOut')
+    rename_dict_key(vebus, '/Energy/AcIn2ToInverter', '/Energy/GensetToDc')
+    rename_dict_key(vebus, '/Energy/AcIn1ToInverter', '/Energy/GridToDc')
+    rename_dict_key(vebus, '/Energy/AcOutToAcIn2', '/Energy/AcOutToGenset')
+    rename_dict_key(vebus, '/Energy/AcOutToAcIn1', '/Energy/AcOutToGrid')
+    rename_dict_key(vebus, '/Energy/InverterToAcIn2', '/Energy/DcToGenset')
+    rename_dict_key(vebus, '/Energy/InverterToAcIn1', '/Energy/DcToGrid')
 
     # Rename Inverter to Dc, so we are consistent with above
     rename_dict_key(vebus, '/Energy/InverterToAcOut', '/Energy/DcToAcOut')
