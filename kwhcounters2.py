@@ -154,6 +154,7 @@ class KwhDeltas:
             # Split pv inverters in three groups: grid, genset and mains
             position = self.dbusmonitor.get_value(servicename, '/Position')
             pvtype = {0: 'pvac.genset', 1: 'pvac.output', 2: 'pvac.grid'}
+            logging.debug("%s, p:%s = %s" % (servicename, position, pvtype[position]))
             self.store[pvtype[position]]['services'].append(servicename)
         elif serviceclass == 'solarcharger':
             # Group all solarchargers together
